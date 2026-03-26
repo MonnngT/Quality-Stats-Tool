@@ -45,7 +45,7 @@ def parse_data(input_string, dtype=float):
         st.error("数据解析错误！请确保输入格式正确。")
         return []
 
-# ================= 0-6 基础检验模块 (保持原样) =================
+# ================= 0-8 基础模块 =================
 if analysis_type == "0. 正态性检验 (Normality Test)":
     st.header("正态性检验 (Shapiro-Wilk Test)")
     st.markdown("> 🎯 **前提要求**：T检验、ANOVA 等连续型数据分析工具，均要求数据服从正态分布。**P > 0.05** 代表正态。")
@@ -64,7 +64,6 @@ if analysis_type == "0. 正态性检验 (Normality Test)":
 
 elif analysis_type == "1. 单样本 T检验 (1-Sample t)":
     st.header("单样本 T检验")
-    st.markdown("> 🎯 **应用场景**：比较【当前的一批产品均值】与【固定的设计目标值】是否有显著偏差。")
     target_mean = st.number_input("输入目标均值:", value=3000.0)
     data_input = st.text_area("粘贴测试数据:", "2985 2990 3005 2980 2995 3010 2990 3000 2985 2995")
     if st.button("运行分析"):
@@ -77,7 +76,6 @@ elif analysis_type == "1. 单样本 T检验 (1-Sample t)":
 
 elif analysis_type == "2. 双样本 T检验 (2-Sample t)":
     st.header("双样本 T检验 (独立样本)")
-    st.markdown("> 🎯 **应用场景**：比较【两批相互独立的产品】的均值是否有显著差异。")
     col1, col2 = st.columns(2)
     with col1: d1_in = st.text_area("组别 A (如旧工艺):", "15.2 14.8 15.5 14.9 15.1 15.3 14.7")
     with col2: d2_in = st.text_area("组别 B (如新工艺):", "16.1 15.9 16.5 16.2 16.0 16.3 16.1")
@@ -96,7 +94,6 @@ elif analysis_type == "2. 双样本 T检验 (2-Sample t)":
 
 elif analysis_type == "3. 配对 T检验 (Paired t)":
     st.header("配对 T检验 (Paired t-test)")
-    st.markdown("> 🎯 **应用场景**：比较【同一批对象】在受到某种处理【前】与【后】的变化。")
     col1, col2 = st.columns(2)
     with col1: d1_in = st.text_area("处理前 (Before):", "50 52 49 55 51 53 50")
     with col2: d2_in = st.text_area("处理后 (After):", "53 54 53 58 54 55 52")
@@ -137,7 +134,6 @@ elif analysis_type == "5. 双比例检验 (2-Proportion)":
 
 elif analysis_type == "6. 卡方检验 (Chi-Square)":
     st.header("卡方检验 (独立性检验)")
-    st.markdown("请以矩阵形式输入频数数据（每行代表一个类别，数字用空格隔开）。")
     matrix_in = st.text_area("输入频数矩阵 (例如2行3列):", "10 20 30\n15 15 35")
     if st.button("运行分析"):
         try:
@@ -150,10 +146,8 @@ elif analysis_type == "6. 卡方检验 (Chi-Square)":
         except Exception:
             st.error("数据格式错误。")
 
-# ================= 7. 单因素 ANOVA =================
 elif analysis_type == "7. 单因素方差分析 (One-Way ANOVA)":
     st.header("单因素 ANOVA & Tukey 事后检验")
-    st.markdown("> 🎯 **应用场景**：比较【3个或以上独立组别】的均值是否有显著差异。")
     num_groups = st.number_input("请选择要比较的组数 (2 到 10 组):", min_value=2, max_value=10, value=3, step=1)
     groups_data_inputs = []
     group_names = []
@@ -193,10 +187,8 @@ elif analysis_type == "7. 单因素方差分析 (One-Way ANOVA)":
                 st.pyplot(fig)
             else: st.success("结论：各组均值无显著差异。")
 
-# ================= 8. 双因素 ANOVA =================
 elif analysis_type == "8. 双因素方差分析 (Two-Way ANOVA)":
     st.header("双因素 ANOVA (含交互作用评估)")
-    st.markdown("> 🎯 **应用场景**：同时评估【两个变量（因子）】对结果的影响，并寻找交互作用。")
     col1, col2, col3 = st.columns(3)
     with col1: y_in = st.text_area("结果 Y (如强度):", "50 52 48 60 62 58 55 54 53 70 72 68")
     with col2: fa_in = st.text_area("因子 A (如速度):", "低 低 低 低 低 低 高 高 高 高 高 高")
@@ -221,7 +213,7 @@ elif analysis_type == "8. 双因素方差分析 (Two-Way ANOVA)":
                 st.pyplot(fig)
             except Exception as e: st.error(f"模型运算出错: {e}")
 
-# ================= 9. 测量系统分析 (MSA Gage R&R) =================
+# ================= 9. 测量系统分析 (MSA Gage R&R) - 修复版 =================
 elif analysis_type == "9. 测量系统分析 (MSA Gage R&R)":
     st.header("测量系统分析 (Gage R&R - 交叉 ANOVA 法)")
     st.markdown("""
@@ -253,6 +245,9 @@ elif analysis_type == "9. 测量系统分析 (MSA Gage R&R)":
                 model = ols('Value ~ C(Part) + C(Appraiser) + C(Part):C(Appraiser)', data=df).fit()
                 anova_table = sm.stats.anova_lm(model, typ=2)
                 
+                # 🌟 核心修复点：手动计算 Python statsmodels 缺失的 mean_sq (均方) 🌟
+                anova_table['mean_sq'] = anova_table['sum_sq'] / anova_table['df']
+                
                 # 获取各个维度的数量
                 a = df['Appraiser'].nunique()
                 p = df['Part'].nunique()
@@ -261,7 +256,7 @@ elif analysis_type == "9. 测量系统分析 (MSA Gage R&R)":
                 if n <= 1:
                     st.error("每个检验员测每个零件至少需要测 2 次以上（有重复测试）才能计算出设备误差 EV！")
                 else:
-                    # 提取均方 (MS)
+                    # 提取均方 (MS)，现在不会报错了
                     ms_p = anova_table.loc['C(Part)', 'mean_sq']
                     ms_a = anova_table.loc['C(Appraiser)', 'mean_sq']
                     ms_pa = anova_table.loc['C(Part):C(Appraiser)', 'mean_sq']
