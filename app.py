@@ -11,7 +11,6 @@ import seaborn as sns
 import re
 
 # ================= 解决 Matplotlib 云端中文乱码问题 =================
-# 优先使用 Linux 开源中文字体 (WenQuanYi Zen Hei)，向下兼容 Windows 和 Mac
 plt.rcParams['font.sans-serif'] = ['WenQuanYi Zen Hei', 'SimHei', 'Microsoft YaHei', 'Arial Unicode MS', 'sans-serif']
 plt.rcParams['axes.unicode_minus'] = False # 正常显示负号
 
@@ -26,7 +25,7 @@ analysis_type = st.sidebar.radio(
         "0. 正态性检验 (Normality Test)",
         "1. 单样本 T检验 (1-Sample t)",
         "2. 双样本 T检验 (2-Sample t)",
-        "3. 配建 T检验 (Paired t)",
+        "3. 配对 T检验 (Paired t)",
         "4. 单比例检验 (1-Proportion)",
         "5. 双比例检验 (2-Proportion)",
         "6. 卡方检验 (Chi-Square)",
@@ -38,7 +37,6 @@ analysis_type = st.sidebar.radio(
 def parse_data(input_string, dtype=float):
     if not input_string.strip():
         return []
-    # 支持空格、逗号、换行符分隔的数据
     raw_data = re.split(r'[\s,]+', input_string.strip())
     try:
         return [dtype(x) for x in raw_data if x]
@@ -123,7 +121,7 @@ elif analysis_type == "2. 双样本 T检验 (2-Sample t)":
             st.pyplot(fig)
 
 # ================= 3. 配对 T检验 =================
-elif analysis_type == "3. 配建 T检验 (Paired t)":
+elif analysis_type == "3. 配对 T检验 (Paired t)":
     st.header("配对 T检验 (Paired t-test)")
     st.markdown("""
     > 🎯 **应用场景**：比较【同一批对象】在受到某种处理【前】与【后】的变化。两组数据必须是一一对应的。
@@ -209,33 +207,71 @@ elif analysis_type == "6. 卡方检验 (Chi-Square)":
 elif analysis_type == "7. 单因素方差分析 (One-Way ANOVA)":
     st.header("单因素 ANOVA & Tukey 事后检验")
     st.markdown("""
-    > 🎯 **应用场景**：比较【3个或以上独立组别】的均值是否有显著差异。例如：对比3家不同压铸供应商的零件参数。
-    > 📌 **判断标准**：若 ANOVA **P < 0.05**，代表至少有一组与众不同。程序将**自动执行 Tukey 事后检验**，帮您具体揪出差异方。
+    > 🎯 **应用场景**：比较【3个或以上独立组别】的均值是否有显著差异。例如：对比多家不同供应商交付零件的关键参数。
+    > 📌 **判断标准**：若 ANOVA **P < 0.05**，代表至少有一组与众不同。程序将**自动执行 Tukey 事后检验**，帮您具体揪出差异方（看表格的 reject 列，True 代表有显著差异）。
     """)
-    c1, c2, c3 = st.columns(3)
-    with c1: g1 = st.text_area("组 A:", "45 42 48 46 44 47")
-    with c2: g2 = st.text_area("组 B:", "43 40 45 41 42 41")
-    with c3: g3 = st.text_area("组 C:", "55 52 58 56 54 57")
+    
+    # ======= 动态生成组别输入框 =======
+    num_groups = st.number_input("请选择要比较的组数 (2 到 10 组):", min_value=2, max_value=10, value=3, step=1)
+    
+    groups_data_inputs = []
+    group_names = []
+    
+    # 使用 3 列的网格布局来排列输入框
+    cols = st.columns(3)
+    for i in range(num_groups):
+        group_name = chr(ord('A') + i)  # 自动生成 A, B, C, D...
+        with cols[i % 3]:
+            # 给前三组塞点默认数据，方便演示
+            default_text = ""
+            if i == 0: default_text = "45 42 48 46 44 47"
+            elif i == 1: default_text = "43 40 45 41 42 41"
+            elif i == 2: default_text = "55 52 58 56 54 57"
+            
+            text_input = st.text_area(f"组别 {group_name}:", value=default_text, key=f"anova_group_{i}")
+            groups_data_inputs.append(text_input)
+            group_names.append(group_name)
 
     if st.button("运行分析"):
-        d1, d2, d3 = parse_data(g1), parse_data(g2), parse_data(g3)
-        if len(d1)>1 and len(d2)>1 and len(d3)>1:
-            f_stat, p_value = stats.f_oneway(d1, d2, d3)
+        parsed_data = []
+        valid_labels = []
+        
+        # 遍历解析所有组的数据
+        for i, d_text in enumerate(groups_data_inputs):
+            d = parse_data(d_text)
+            if len(d) > 1:
+                parsed_data.append(d)
+                valid_labels.append(group_names[i])
+            elif len(d) > 0:
+                st.warning(f"组别 {group_names[i]} 数据不足 (至少需要2个数据点)，已忽略该组。")
+                
+        if len(parsed_data) >= 2:
+            # 这里的 *parsed_data 是 Python 神奇的“解包”操作，无论传入多少组都能算
+            f_stat, p_value = stats.f_oneway(*parsed_data)
             st.write(f"- **ANOVA P 值**: {p_value:.4f}")
+            
             if p_value < 0.05:
                 st.error("结论：至少有一组存在显著差异！自动执行 Tukey 检验：")
-                all_vals = np.concatenate([d1, d2, d3])
-                labels = ['A']*len(d1) + ['B']*len(d2) + ['C']*len(d3)
+                
+                # 动态拼接所有数据供 Tukey 检验使用
+                all_vals = np.concatenate(parsed_data)
+                labels = []
+                for name, data in zip(valid_labels, parsed_data):
+                    labels.extend([name] * len(data))
+                    
                 tukey = pairwise_tukeyhsd(endog=all_vals, groups=labels, alpha=0.05)
                 st.text(tukey.summary())
                 
-                fig, ax = plt.subplots(figsize=(6, 4))
-                sns.boxplot(data=[d1, d2, d3], ax=ax, palette="Set1")
-                ax.set_xticklabels(['组别 A', '组别 B', '组别 C'])
+                # 动态生成箱线图
+                fig, ax = plt.subplots(figsize=(8, 5))
+                sns.boxplot(data=parsed_data, ax=ax, palette="Set1")
+                ax.set_xticklabels([f"组别 {name}" for name in valid_labels])
                 ax.set_title("ANOVA 分组箱线图")
                 st.pyplot(fig)
             else:
                 st.success("结论：各组均值无显著差异。")
+        else:
+            st.warning("至少需要 2 个有效的组别才能进行 ANOVA 分析，请检查输入！")
 
 # ================= 8. 双因素 ANOVA =================
 elif analysis_type == "8. 双因素方差分析 (Two-Way ANOVA)":
@@ -276,10 +312,45 @@ elif analysis_type == "8. 双因素方差分析 (Two-Way ANOVA)":
                 else:
                     st.success(f"因子 A 和 B 之间无显著交互作用 (P={p_ab:.4f})。")
                     
+                # 绘制交互作用图
                 fig, ax = plt.subplots(figsize=(6, 4))
                 sns.pointplot(data=df, x='FactorA', y='Y', hue='FactorB', ax=ax, markers=['o', 's'], capsize=.1)
                 ax.set_title("交互作用图 (Interaction Plot)")
                 st.pyplot(fig)
+                
+                # ================= 🌟 图表诊断与大白话解读向导 🌟 =================
+                st.markdown("---")
+                st.subheader("📊 交互作用图深入解读向导")
+
+                if p_ab < 0.05:
+                    interpretation = """
+                    **🎯 图表诊断：发现显著的“化学反应” (线段非平行或交叉)**
+
+                    当交互作用显著时，意味着这两个因子**互相制约**。我们不能再孤立地谈论某个因子的好坏，而是要寻找**最佳的特定参数搭配**。
+
+                    **👀 应该怎么看图？**
+
+                    1.  **看趋势差异**：请特别观察不同颜色线段从左到右的**斜率差异**。它们不仅高度不同，趋势也不同。例如，在低 FactorA 下，FactorB 带来的提升可能较小，但在高 FactorA 下，FactorB 的提升效果可能会瞬间翻倍（或者反过来下降）。
+                    2.  **寻找黄金组合**：既然有了化学反应，我们的目的就是寻找使结果 Y 达到期望值（比如让强度最大化、孔隙率最小化）的**特定坐标点**。
+                        * 如果目的是让 Y **最大**：在图中找到最高点对应的横坐标 (Factor A) 和图例颜色 (Factor B)。
+                        * 如果目的是让 Y **最小**：找到图中的最低点对应的特定搭配。
+
+                    > **💡 工艺启示**：调整工艺参数时，必须同时绑定这两个因子，不能“顾头不顾尾”。
+                    """
+                    st.info(interpretation)
+                else:
+                    interpretation = """
+                    **🎯 图表诊断：无显著交互作用 (线段大致平行)**
+
+                    当交互作用不显著时，意味着这两个因子**各干各的**，互不干扰。我们可以分别得出独立的工艺优化结论：
+
+                    **👀 应该怎么看图？**
+
+                    1.  **因子 A 的单独影响**：请观察线段的**整体倾斜度**。如果所有线段都从左向右显著**上升**，说明增加 FactorA 都会稳定提高结果 Y，不论 FactorB 处于什么状态。
+                    2.  **因子 B 的单独影响**：请观察两条线段之间的**垂直距离**。如果一条线一直显著高于另一条线，说明将 FactorB 设定在该状态下，都能产生稳定的提升效果。
+                    3.  **最终优化思路**：如果想让 Y 最大，只需要简单粗暴地将这两个因子都分别调至它们各自能产生最高 Y 值的水平即可（通常是右上角区域），不需要考虑复杂的搭配。
+                    """
+                    st.info(interpretation)
                 
             except Exception as e:
                 st.error(f"模型运算出错，请检查数据格式是否正确。错误信息：{e}")
