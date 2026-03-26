@@ -1,0 +1,4 @@
+streamlit
+scipy
+statsmodels
+seaborn
