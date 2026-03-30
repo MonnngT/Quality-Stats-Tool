@@ -8,15 +8,17 @@ import statsmodels.api as sm
 from statsmodels.formula.api import ols
 import matplotlib.pyplot as plt
 import seaborn as sns
+import re
 
 # ================= 解决 Matplotlib 云端中文乱码问题 =================
+# 优先使用 Linux 开源中文字体，向下兼容 Windows 和 Mac
 plt.rcParams['font.sans-serif'] = ['WenQuanYi Zen Hei', 'SimHei', 'Microsoft YaHei', 'Arial Unicode MS', 'sans-serif']
 plt.rcParams['axes.unicode_minus'] = False # 正常显示负号
 
 # ================= 页面配置 =================
 st.set_page_config(page_title="全能版质量统计中心", layout="wide")
 st.title("📊 Web 版 Minitab - 全能质量统计工具")
-st.markdown("💡 **操作提示**：下方所有数据表格，均支持直接从本地 **Excel** 中复制列，并在网页表格中按 `Ctrl+V` 粘贴！")
+st.markdown("💡 **操作提示**：下方所有数据表格，均支持直接从本地 **Excel** 中选中整列复制，并在网页表格的表头处按 `Ctrl+V` 粘贴！")
 
 # 侧边栏菜单
 analysis_type = st.sidebar.radio(
@@ -31,7 +33,8 @@ analysis_type = st.sidebar.radio(
         "6. 卡方检验 (Chi-Square)",
         "7. 单因素方差分析 (One-Way ANOVA)",
         "8. 双因素方差分析 (Two-Way ANOVA)",
-        "9. 测量系统分析 (MSA Gage R&R)"
+        "9. 测量系统分析 (MSA Gage R&R)",
+        "10. 过程能力分析 (Cp/Cpk)"
     )
 )
 
@@ -137,7 +140,7 @@ elif analysis_type == "3. 配对 T检验 (Paired t)":
             if p_value < 0.05: st.error("结论：处理前后存在显著差异！")
             else: st.success("结论：处理前后无显著差异。")
 
-# ================= 4 & 5 比例检验 (保持数字框输入最方便) =================
+# ================= 4. 单比例检验 =================
 elif analysis_type == "4. 单比例检验 (1-Proportion)":
     st.header("单比例检验")
     st.markdown("> 🎯 **应用场景**：比较【当前的实际不良率】与【设定的目标不良率】是否有显著差异。")
@@ -151,6 +154,7 @@ elif analysis_type == "4. 单比例检验 (1-Proportion)":
         if p_value < 0.05: st.error("结论：实际比率与目标比率有显著差异！")
         else: st.success("结论：实际比率与目标比率无显著差异。")
 
+# ================= 5. 双比例检验 =================
 elif analysis_type == "5. 双比例检验 (2-Proportion)":
     st.header("双比例检验")
     st.markdown("> 🎯 **应用场景**：比较【两个不同群体】的不良率是否有显著差异。例如对比两家供应商。")
@@ -167,7 +171,7 @@ elif analysis_type == "5. 双比例检验 (2-Proportion)":
         if p_value < 0.05: st.error("结论：两组不良率存在显著差异！")
         else: st.success("结论：两组不良率无显著差异。")
 
-# ================= 6. 卡方检验 (矩阵保留文本域最佳) =================
+# ================= 6. 卡方检验 =================
 elif analysis_type == "6. 卡方检验 (Chi-Square)":
     st.header("卡方检验 (独立性检验)")
     st.markdown("> 🎯 **应用场景**：判断两个【分类事件】之间是否相互关联。例如“缺陷类型”与“生产班次”。")
@@ -188,19 +192,18 @@ elif analysis_type == "6. 卡方检验 (Chi-Square)":
 elif analysis_type == "7. 单因素方差分析 (One-Way ANOVA)":
     st.header("单因素 ANOVA & Tukey 事后检验")
     st.markdown("""
-    > 🎯 **应用场景**：比较【3个或以上独立组别】的均值是否有显著差异。例如：对比多家不同供应商交付零件的参数。
+    > 🎯 **应用场景**：比较【3个或以上独立组别】的均值是否有显著差异。
     > 📌 **判断标准**：若 ANOVA **P < 0.05**，代表至少有一组与众不同。程序将**自动执行 Tukey 事后检验**揪出差异方。
     """)
     num_groups = st.number_input("请选择要比较的组数 (2 到 10 组):", min_value=2, max_value=10, value=3, step=1)
     
-    # 动态构建 DataFrame 的列
     cols = [f"组别 {chr(ord('A') + i)}" for i in range(num_groups)]
     default_data = {}
     for i, col in enumerate(cols):
-        if i == 0: default_data[col] = [45, 42, 48, 46, 44, 47]
-        elif i == 1: default_data[col] = [43, 40, 45, 41, 42, 41]
-        elif i == 2: default_data[col] = [55, 52, 58, 56, 54, 57]
-        else: default_data[col] = [np.nan] * 6 # 默认空列
+        if i == 0: default_data[col] = [45.1, 42.5, 48.0, 46.2, 44.8, 47.1]
+        elif i == 1: default_data[col] = [43.0, 40.5, 45.1, 41.2, 42.1, 41.5]
+        elif i == 2: default_data[col] = [55.2, 52.8, 58.1, 56.4, 54.9, 57.0]
+        else: default_data[col] = [np.nan] * 6
 
     df_default = pd.DataFrame(default_data)
     edited_df = st.data_editor(df_default, num_rows="dynamic", use_container_width=True)
@@ -247,7 +250,7 @@ elif analysis_type == "8. 双因素方差分析 (Two-Way ANOVA)":
     edited_df = st.data_editor(df_default, num_rows="dynamic", use_container_width=True)
 
     if st.button("运行分析"):
-        df = edited_df.dropna(how='any').copy() # 移除含有空白的行
+        df = edited_df.dropna(how='any').copy()
         df['Y'] = pd.to_numeric(df['结果 Y (如强度)'], errors='coerce')
         df = df.dropna(subset=['Y'])
         df['FactorA'] = df['因子 A (如速度)'].astype(str)
@@ -287,7 +290,6 @@ elif analysis_type == "9. 测量系统分析 (MSA Gage R&R)":
     edited_df = st.data_editor(df_default, num_rows="dynamic", use_container_width=True)
         
     if st.button("🚀 运行 MSA 分析"):
-        # 数据清洗
         df = edited_df.dropna(how='any').copy()
         df['Value'] = pd.to_numeric(df['测量数值 (Value)'], errors='coerce')
         df = df.dropna(subset=['Value'])
@@ -295,20 +297,18 @@ elif analysis_type == "9. 测量系统分析 (MSA Gage R&R)":
         df['Appraiser'] = df['检验员/量具 (Appraiser)'].astype(str)
         
         if len(df) > 0:
-            # 🌟 修复底层崩溃的重点：校验重复测量次数 🌟
             counts = df.groupby(['Part', 'Appraiser']).size()
             if counts.min() < 2:
-                st.error("❌ **数据错误：缺少重复测量数据！**\n\n交叉 ANOVA 要求【每位检验员/量具】对【每个零件】必须测量至少 **2 次** 才能算出设备误差 (EV)。目前您的表格中存在只测量了 1 次的组合，系统拒绝运算。请补充完整数据。")
+                st.error("❌ **数据错误：缺少重复测量数据！**\n\n交叉 ANOVA 要求【每位检验员/量具】对【每个零件】必须测量至少 **2 次** 才能算出设备误差 (EV)。")
             else:
                 try:
-                    # 建立方差分析模型提取均方差
                     model = ols('Value ~ C(Part) + C(Appraiser) + C(Part):C(Appraiser)', data=df).fit()
                     anova_table = sm.stats.anova_lm(model, typ=2)
                     anova_table['mean_sq'] = anova_table['sum_sq'] / anova_table['df']
                     
                     a = df['Appraiser'].nunique()
                     p = df['Part'].nunique()
-                    n = len(df) / (a * p) # 测量次数
+                    n = len(df) / (a * p) 
                     
                     ms_p = anova_table.loc['C(Part)', 'mean_sq']
                     ms_a = anova_table.loc['C(Appraiser)', 'mean_sq']
@@ -337,10 +337,10 @@ elif analysis_type == "9. 测量系统分析 (MSA Gage R&R)":
                     col_met1.metric(label="总 Gage R&R (%)", value=f"{pct_grr:.2f}%", delta="< 10% 卓越 | < 30% 及格" if pct_grr < 30 else "> 30% 需整改", delta_color="inverse")
                     col_met2.metric(label="NDC (可区分类别数)", value=ndc, delta=">= 5 达标" if ndc >= 5 else "< 5 不达标")
                     
-                    st.markdown("### 🔍 误差来源拆解 (谁背锅？)")
+                    st.markdown("### 🔍 误差来源拆解")
                     st.write(f"- **总测量系统误差 (GRR)**: {pct_grr:.2f}%")
-                    st.write(f"  - ➡️ **设备变差 / 重复性 (EV)**: {pct_ev:.2f}% *(设备本身波动)*")
-                    st.write(f"  - ➡️ **人为变差 / 再现性 (AV)**: {pct_av:.2f}% *(不同检验员/量具间的差异)*")
+                    st.write(f"  - ➡️ **设备变差 (EV)**: {pct_ev:.2f}%")
+                    st.write(f"  - ➡️ **人为变差 (AV)**: {pct_av:.2f}%")
                     st.write(f"- **真实产品波动 (PV)**: {pct_pv:.2f}%")
 
                     fig, ax = plt.subplots(figsize=(8, 3))
@@ -348,9 +348,93 @@ elif analysis_type == "9. 测量系统分析 (MSA Gage R&R)":
                     values = [pct_ev, pct_av, pct_grr, pct_pv]
                     sns.barplot(x=values, y=components, palette="Blues_d", ax=ax)
                     ax.set_xlim(0, 100)
-                    ax.set_xlabel('占总变差百分比 (%)')
                     for i, v in enumerate(values):
                         ax.text(v + 1, i, f"{v:.2f}%", va='center')
                     st.pyplot(fig)
                 except Exception as e:
                     st.error(f"模型运算出错，请确保数据输入完整平衡。错误详情: {e}")
+
+# ================= 10. 过程能力分析 (Cp/Cpk) =================
+elif analysis_type == "10. 过程能力分析 (Cp/Cpk)":
+    st.header("过程能力分析 (Cp/Cpk)")
+    st.markdown("""
+    > 🎯 **应用场景**：对比多组工艺参数，评估哪一组**更稳定**（波动小）且**更准**（趋近目标值）。
+    > 📌 **判断标准**：
+    > * **Cp (稳定性)**：仅衡量分布宽窄。$> 1.33$ 代表工艺稳定。
+    > * **Cpk (综合水平)**：衡量数据是否集中且对准了靶心。**Cpk 越高越好，理想状态 $\ge 1.33$**。
+    """)
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        usl = st.number_input("规格上限 (USL):", value=10.5, step=0.1)
+    with col2:
+        lsl = st.number_input("规格下限 (LSL):", value=9.5, step=0.1)
+        
+    num_groups = st.number_input("请选择要对比的工艺组数 (1 到 5 组):", min_value=1, max_value=5, value=3, step=1)
+    
+    cols = [f"工艺 {chr(ord('A') + i)}" for i in range(num_groups)]
+    default_data = {}
+    for i, col in enumerate(cols):
+        if i == 0: default_data[col] = [9.8, 9.9, 10.1, 10.0, 10.2, 9.7, 9.9, 10.1] # 偏低
+        elif i == 1: default_data[col] = [10.0, 10.1, 9.9, 10.0, 10.0, 9.9, 10.1, 10.0] # 极好
+        elif i == 2: default_data[col] = [10.3, 10.4, 9.5, 9.8, 10.6, 9.7, 10.5, 9.6] # 波动大
+        else: default_data[col] = [np.nan] * 8
+
+    df_default = pd.DataFrame(default_data)
+    edited_df = st.data_editor(df_default, num_rows="dynamic", use_container_width=True)
+    
+    if st.button("🚀 运行能力评估"):
+        if usl <= lsl:
+            st.error("❌ 规格上限 (USL) 必须大于规格下限 (LSL)！")
+        else:
+            results = []
+            valid_data_dict = {}
+            
+            for col in cols:
+                d = pd.to_numeric(edited_df[col], errors='coerce').dropna().tolist()
+                if len(d) > 2:
+                    valid_data_dict[col] = d
+                    mean = np.mean(d)
+                    std = np.std(d, ddof=1)
+                    
+                    cp = (usl - lsl) / (6 * std) if std > 0 else 0
+                    cpu = (usl - mean) / (3 * std) if std > 0 else 0
+                    cpl = (mean - lsl) / (3 * std) if std > 0 else 0
+                    cpk = min(cpu, cpl)
+                    
+                    results.append({
+                        "工艺组别": col,
+                        "均值 (Mean)": round(mean, 3),
+                        "波动 标准差 (Std)": round(std, 3),
+                        "Cp (稳定性)": round(cp, 2),
+                        "Cpk (综合水平)": round(cpk, 2)
+                    })
+            
+            if results:
+                st.subheader("🏆 评估结果排行榜")
+                res_df = pd.DataFrame(results)
+                # 高亮最佳 Cpk
+                st.dataframe(res_df.style.highlight_max(subset=['Cpk (综合水平)'], color='lightgreen'))
+                
+                # 绘制分布对比图
+                st.markdown("### 📊 分布形态对比")
+                fig, ax = plt.subplots(figsize=(10, 5))
+                colors = sns.color_palette("Set1", len(valid_data_dict))
+                
+                for i, (name, data) in enumerate(valid_data_dict.items()):
+                    sns.kdeplot(data, ax=ax, label=f"{name} (Cpk={res_df.iloc[i]['Cpk (综合水平)']})", color=colors[i], fill=True, alpha=0.3)
+                
+                # 画出上下限
+                ax.axvline(usl, color='red', linestyle='--', label=f'USL ({usl})')
+                ax.axvline(lsl, color='red', linestyle='--', label=f'LSL ({lsl})')
+                
+                ax.set_title("工艺能力分布曲线")
+                ax.legend()
+                st.pyplot(fig)
+                
+                # 大白话建议
+                best_group = res_df.loc[res_df['Cpk (综合水平)'].idxmax()]
+                st.success(f"**终极建议**：推荐使用 **{best_group['工艺组别']}** 的参数！它的 Cpk 最高（{best_group['Cpk (综合水平)']}），说明它不仅波动控制得好（分布窄），而且均值稳稳地打在了规格中心地带。")
+                
+            else:
+                st.warning("每组至少需要输入 3 个有效数据才能计算过程能力！")
