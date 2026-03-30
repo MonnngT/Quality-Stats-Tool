@@ -38,6 +38,17 @@ analysis_type = st.sidebar.radio(
     )
 )
 
+def parse_data(input_string, dtype=float):
+    if not input_string.strip():
+        return []
+    # 支持空格、逗号、换行符分隔的数据
+    raw_data = re.split(r'[\s,]+', input_string.strip())
+    try:
+        return [dtype(x) for x in raw_data if x]
+    except ValueError:
+        st.error("数据解析错误！请确保输入格式正确。")
+        return []
+
 # ================= 0. 正态性检验 =================
 if analysis_type == "0. 正态性检验 (Normality Test)":
     st.header("正态性检验 (Shapiro-Wilk Test)")
@@ -375,9 +386,9 @@ elif analysis_type == "10. 过程能力分析 (Cp/Cpk)":
     cols = [f"工艺 {chr(ord('A') + i)}" for i in range(num_groups)]
     default_data = {}
     for i, col in enumerate(cols):
-        if i == 0: default_data[col] = [9.8, 9.9, 10.1, 10.0, 10.2, 9.7, 9.9, 10.1] # 偏低
-        elif i == 1: default_data[col] = [10.0, 10.1, 9.9, 10.0, 10.0, 9.9, 10.1, 10.0] # 极好
-        elif i == 2: default_data[col] = [10.3, 10.4, 9.5, 9.8, 10.6, 9.7, 10.5, 9.6] # 波动大
+        if i == 0: default_data[col] = [9.8, 9.9, 10.1, 10.0, 10.2, 9.7, 9.9, 10.1]
+        elif i == 1: default_data[col] = [10.0, 10.1, 9.9, 10.0, 10.0, 9.9, 10.1, 10.0]
+        elif i == 2: default_data[col] = [10.3, 10.4, 9.5, 9.8, 10.6, 9.7, 10.5, 9.6]
         else: default_data[col] = [np.nan] * 8
 
     df_default = pd.DataFrame(default_data)
@@ -413,10 +424,8 @@ elif analysis_type == "10. 过程能力分析 (Cp/Cpk)":
             if results:
                 st.subheader("🏆 评估结果排行榜")
                 res_df = pd.DataFrame(results)
-                # 高亮最佳 Cpk
                 st.dataframe(res_df.style.highlight_max(subset=['Cpk (综合水平)'], color='lightgreen'))
                 
-                # 绘制分布对比图
                 st.markdown("### 📊 分布形态对比")
                 fig, ax = plt.subplots(figsize=(10, 5))
                 colors = sns.color_palette("Set1", len(valid_data_dict))
@@ -424,7 +433,6 @@ elif analysis_type == "10. 过程能力分析 (Cp/Cpk)":
                 for i, (name, data) in enumerate(valid_data_dict.items()):
                     sns.kdeplot(data, ax=ax, label=f"{name} (Cpk={res_df.iloc[i]['Cpk (综合水平)']})", color=colors[i], fill=True, alpha=0.3)
                 
-                # 画出上下限
                 ax.axvline(usl, color='red', linestyle='--', label=f'USL ({usl})')
                 ax.axvline(lsl, color='red', linestyle='--', label=f'LSL ({lsl})')
                 
@@ -432,9 +440,19 @@ elif analysis_type == "10. 过程能力分析 (Cp/Cpk)":
                 ax.legend()
                 st.pyplot(fig)
                 
-                # 大白话建议
+                # ================= 🌟 修复后的智能大白话诊断逻辑 🌟 =================
+                max_cpk = res_df['Cpk (综合水平)'].max()
                 best_group = res_df.loc[res_df['Cpk (综合水平)'].idxmax()]
-                st.success(f"**终极建议**：推荐使用 **{best_group['工艺组别']}** 的参数！它的 Cpk 最高（{best_group['Cpk (综合水平)']}），说明它不仅波动控制得好（分布窄），而且均值稳稳地打在了规格中心地带。")
+                
+                if max_cpk < 0:
+                    st.error(f"🚨 **严重警告：所有工艺均已脱靶！**\n\n目前所有工艺的 Cpk 均小于 0，说明产品均值已完全偏离公差带（图上可见全部在红线外）。\n虽然数学上 {best_group['工艺组别']} 得分最高（{max_cpk}），但**在工程上绝对不能采用它**！\n\n💡 **专家建议**：请观察上方分布图，找出**曲线最窄（Cp 稳定性最高）**的工艺。该工艺的重复性极好，只需调整机器中心参数（Offset）将其向左或向右平移至靶心，即可成为最佳工艺！")
+                
+                elif max_cpk < 1.0:
+                    st.warning(f"⚠️ **勉强及格**：推荐使用 **{best_group['工艺组别']}** 的参数（Cpk={max_cpk}）。但注意，它的 Cpk 仍然小于 1.0，说明有一定的废品率风险，建议继续优化参数压缩波动。")
+                    
+                else:
+                    st.success(f"🏆 **终极建议**：强烈推荐使用 **{best_group['工艺组别']}** 的参数！它的 Cpk 最高（{max_cpk}），说明它不仅波动控制得好（分布窄），而且均值稳稳地打在了规格中心地带。")
+                # =====================================================================
                 
             else:
                 st.warning("每组至少需要输入 3 个有效数据才能计算过程能力！")
